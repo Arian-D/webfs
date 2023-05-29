@@ -1,7 +1,10 @@
-Web FileSystem
+Web FileSystem (WIP)
 ==============
 
+Mount the web as a filesystem.
+
 # Plan #
+(Move this to an `.org` file plzzz)
 
 ## General idea ##
 
@@ -16,6 +19,18 @@ Certain other things could be done like having gobuster be used to
 enumerate a certain path or like writing to a file could be some sort
 of post request, but those are beyond the scope of what I wanna do
 now; for now I just wanna be able to read from 
+
+## Cool things to add ##
+What about protocols other than http(s)?
+ipfs and ftp would be good ones to add, or maybe even gemini?
+Another thing question I raise here is: where does the user specify
+the protocol? Is it `.../ftp/someurl/somefile`? What about *guessing*
+what the protocol is? Like `.../some-ipfs-address` and we'd get the
+content.
+
+Another nice-to-have would be writing. Uploading to ftp servers as
+anonymous or registering to ipfs when Kubo is already set up would be
+pretty cool.
 
 ## Language choice ##
 Rust might be easier for me, but I see a lot of golang jobs so imma go
