@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
 	"flag"
 	"fmt"
-	"os"
+	"io/ioutil"
+	"net/http"
+	"strconv"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -13,8 +16,7 @@ import (
 
 type urlNode struct {
 	fs.Inode
-	url     string
-	content []byte
+	url string
 }
 
 // var _ = (fs.NodeOpener)((*urlNode)(nil))
@@ -23,18 +25,45 @@ type urlNode struct {
 var _ = (fs.NodeLookuper)((*urlNode)(nil))
 
 // TODO: Check if url returns a valid 200-level http response
-func (n *urlNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	return nil, fs.OK
+func (f *urlNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	url := "https://" + name
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return nil, fs.OK
+	}
+	h := sha1.New()
+	h.Write([]byte(url))
+	hash, _ := strconv.Atoi(string(h.Sum(nil)))
+
+	fmt.Println(resp.Status)
+
+	stable := fs.StableAttr{
+		Mode: fuse.S_IFREG,
+		Ino:  uint64(hash),
+	}
+
+	node := &urlNode{url: url}
+
+	child := f.NewInode(ctx, node, stable)
+
+	return child, fs.OK
 }
 
 var _ = (fs.NodeOpener)((*urlNode)(nil))
 
 // TODO: Implement Open
 func (f *urlNode) Open(ctx context.Context, openFlags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	if fuseFlags & (syscall.O_RDWR | syscall.O_WRONLY) != 0 {
+	// Disallow write
+	if fuseFlags&(syscall.O_RDWR|syscall.O_WRONLY) != 0 {
 		return nil, 0, syscall.EROFS
 	}
-	return nil, 0, syscall.EROFS
+	resp, _ := http.Get(f.url)
+	output, _ := ioutil.ReadAll(resp.Body)
+	fh = &bytesFileHandle{
+		content: []byte(output),
+	}
+	return fh, fuse.FOPEN_DIRECT_IO, fs.OK
 }
 
 type bytesFileHandle struct {
@@ -54,13 +83,12 @@ func (fh *bytesFileHandle) Read(ctx context.Context, dest []byte, off int64) (fu
 	return fuse.ReadResultData(fh.content[off:end]), 0
 }
 
-
 func main() {
 	path := flag.String("path", "/tmp/webfs", "The path where the directory will be mounted")
 	flag.Parse()
-	err := os.Mkdir(*path, 0755)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+
+	opts := &fs.Options{}
+	opts.Debug = true
+	server, _ := fs.Mount(*path, &urlNode{}, opts)
+	server.Wait()
 }
